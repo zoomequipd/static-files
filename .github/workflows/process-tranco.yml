@@ -33,7 +33,7 @@ jobs:
         run: |
           # Set the configuration from workflow_dispatch inputs
           # (This will always have a value because we defined a default)
-          CONFIG='${{ github.event.inputs.config }}'
+          CONFIG='${{ inputs.config }}'
           
           # Check if manifest.json exists
           if [ ! -f "manifest.json" ]; then
@@ -76,7 +76,7 @@ jobs:
         id: process
         run: |
           # Set the configuration directly from workflow inputs
-          CONFIG='${{ github.event.inputs.config }}'
+          CONFIG='${{ inputs.config }}'
           echo "Processing Tranco CSV with configuration: $CONFIG"
           
           # Check if tranco.csv exists
@@ -111,7 +111,7 @@ jobs:
       - name: Commit and push changes
         run: |
           # Parse the configuration to get the filenames
-          echo '${{ github.event.inputs.config }}' | jq -c '.[]' | while read -r config; do
+          echo '${{ inputs.config }}' | jq -c '.[]' | while read -r config; do
             filename=$(echo $config | jq -r '.filename')
             # Add each generated file individually
             git add "$filename"
