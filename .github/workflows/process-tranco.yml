@@ -14,12 +14,13 @@ on:
         required: true
         default: '[{"count": 10000, "filename": "tranco_top_10k.csv"}, {"count": 50000, "filename": "tranco_top_50k.csv"}]'
 
-permissions:
-  contents: write
+
 
 jobs:
   process-tranco:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout repository
