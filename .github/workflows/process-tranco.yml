@@ -37,7 +37,7 @@ jobs:
               {
                 "count": 100000,
                 "filename": "tranco_top_100k.csv"
-              },
+              }
             ]
         run: |
           echo "CONFIG=$CONFIG_JSON" >> $GITHUB_ENV
