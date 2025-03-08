@@ -98,12 +98,22 @@ jobs:
       
       - name: Commit and push changes
         run: |
+      - name: Commit and push changes
+        run: |
           # Parse the configuration to get the filenames
           echo $CONFIG | jq -c '.[]' | while read -r config; do
             filename=$(echo $config | jq -r '.filename')
             # Add each generated file individually
             git add "$filename"
           done
+          
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes detected in the output files. Nothing to commit."
+          else
+            echo "Changes detected. Committing and pushing..."
+            git commit -m "Update Tranco domain extracts [automated]" && git push
+          fi
           
           # Only commit if there are changes
           git diff --staged --quiet || (git commit -m "Update Tranco domain extracts [automated]" && git push)
