@@ -7,14 +7,7 @@ on:
   pull_request:
     paths:
       - 'tranco.csv'
-  workflow_dispatch:
-    inputs:
-      config:
-        description: 'Configuration for file outputs (JSON array of objects with count and filename)'
-        required: true
-        default: '[{"count": 10000, "filename": "tranco_top_10k.csv"}, {"count": 50000, "filename": "tranco_top_50k.csv"}]'
-
-
+  workflow_dispatch: {}  # Simple manual trigger with no inputs
 
 jobs:
   process-tranco:
@@ -28,21 +21,22 @@ jobs:
         with:
           fetch-depth: 1  # Only fetch the latest commit to speed up checkout
       
+      - name: Set configuration
+        id: config
+        run: |
+          # Configuration is defined directly in the workflow
+          CONFIG='[{"count": 10000, "filename": "tranco_top_10k.csv"}, {"count": 50000, "filename": "tranco_top_50k.csv"}]'
+          echo "CONFIG=$CONFIG" >> $GITHUB_ENV
+          echo "Using configuration: $CONFIG"
+      
       - name: Validate manifest.json
         id: validate
         run: |
-          # Set the configuration from workflow_dispatch inputs
-          # (This will always have a value because we defined a default)
-          CONFIG='${{ inputs.config }}'
-          
           # Check if manifest.json exists
           if [ ! -f "manifest.json" ]; then
             echo "Error: manifest.json file not found"
             exit 1
           fi
-          
-          # Parse manifest.json to get the list of files
-          echo "Validating output files against manifest.json..."
           
           # Create a temporary file to store validation results
           TEMP_FILE=$(mktemp)
@@ -68,15 +62,10 @@ jobs:
           fi
           
           rm $TEMP_FILE
-          
-          # No need to export config as it doesn't change between steps
-        shell: bash
       
       - name: Process Tranco CSV
         id: process
         run: |
-          # Set the configuration directly from workflow inputs
-          CONFIG='${{ inputs.config }}'
           echo "Processing Tranco CSV with configuration: $CONFIG"
           
           # Check if tranco.csv exists
@@ -101,7 +90,6 @@ jobs:
             lines=$(wc -l < "$filename")
             echo "Successfully created $filename with $lines rows"
           done
-        shell: bash
       
       - name: Configure Git
         run: |
@@ -111,11 +99,11 @@ jobs:
       - name: Commit and push changes
         run: |
           # Parse the configuration to get the filenames
-          echo '${{ inputs.config }}' | jq -c '.[]' | while read -r config; do
+          echo $CONFIG | jq -c '.[]' | while read -r config; do
             filename=$(echo $config | jq -r '.filename')
             # Add each generated file individually
             git add "$filename"
           done
           
           # Only commit if there are changes
-          git diff --staged --quiet || (git commit -m "Update Tranco Top Files [Automated]" && git push)
+          git diff --staged --quiet || (git commit -m "Update Tranco domain extracts [automated]" && git push)
