@@ -23,25 +23,17 @@ jobs:
       
       - name: Set configuration
         id: config
-        env:
-          CONFIG_JSON: |
-            [
-              {
-                "count": 10000,
-                "filename": "tranco_top_10k.csv"
-              },
-              {
-                "count": 50000,
-                "filename": "tranco_top_50k.csv"
-              },
-              {
-                "count": 100000,
-                "filename": "tranco_top_100k.csv"
-              }
-            ]
         run: |
-          echo "CONFIG=$CONFIG_JSON" >> $GITHUB_ENV
-          echo "Using configuration: $CONFIG_JSON"
+          # Define the configuration using a properly formatted JSON string
+          # Each entry is on a separate line for readability, but in a format Bash can handle
+          CONFIG='[
+            {"count": 10000, "filename": "tranco_top_10k.csv"},
+            {"count": 50000, "filename": "tranco_top_50k.csv"}
+          ]'
+          
+          # Make sure to use single quotes around the entire JSON to preserve it as-is
+          echo "CONFIG=$CONFIG" >> $GITHUB_ENV
+          echo "Using configuration: $CONFIG"
       
       - name: Validate manifest.json
         id: validate
