@@ -1,0 +1,106 @@
+name: Process Tranco CSV
+
+on:
+  push:
+    paths:
+      - 'tranco.csv'
+  pull_request:
+    paths:
+      - 'tranco.csv'
+  workflow_dispatch:
+    inputs:
+      config:
+        description: 'Configuration for file outputs (JSON array of objects with count and filename)'
+        required: true
+        default: '[{"count": 10000, "filename": "tranco_top_10k.csv"}, {"count": 50000, "filename": "tranco_top_50k.csv"}]'
+
+jobs:
+  process-tranco:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Validate manifest.json
+        id: validate
+        run: |
+          # Set the configuration from workflow_dispatch inputs
+          # (This will always have a value because we defined a default)
+          CONFIG='${{ github.event.inputs.config }}'
+          
+          # Check if manifest.json exists
+          if [ ! -f "manifest.json" ]; then
+            echo "Error: manifest.json file not found"
+            exit 1
+          fi
+          
+          # Parse manifest.json to get the list of files
+          echo "Validating output files against manifest.json..."
+          
+          # Check each output file in the configuration
+          ERROR=0
+          echo $CONFIG | jq -c '.[]' | while read -r config; do
+            filename=$(echo $config | jq -r '.filename')
+            
+            # Check if the filename is in manifest.json
+            if ! grep -q "\"file\": \"$filename\"" manifest.json; then
+              echo "Error: $filename is not defined in manifest.json"
+              ERROR=1
+            else
+              echo "✓ $filename is defined in manifest.json"
+            fi
+          done
+          
+          # Exit if any file is not defined in manifest.json
+          if [ $ERROR -eq 1 ]; then
+            echo "One or more output files are not defined in manifest.json. Please update manifest.json first."
+            exit 1
+          fi
+          
+          # No need to export config as it doesn't change between steps
+        shell: bash
+      
+      - name: Process Tranco CSV
+        id: process
+        run: |
+          # Set the configuration directly from workflow inputs
+          CONFIG='${{ github.event.inputs.config }}'
+          echo "Processing Tranco CSV with configuration: $CONFIG"
+          
+          # Check if tranco.csv exists
+          if [ ! -f "tranco.csv" ]; then
+            echo "Error: tranco.csv file not found"
+            exit 1
+          fi
+          
+          # Parse the JSON configuration and process each output
+          echo $CONFIG | jq -c '.[]' | while read -r config; do
+            count=$(echo $config | jq -r '.count')
+            filename=$(echo $config | jq -r '.filename')
+            
+            if [ -z "$count" ] || [ -z "$filename" ]; then
+              echo "Skipping invalid configuration: $config"
+              continue
+            fi
+            
+            # Get the header line
+            head -n 1 tranco.csv > "$filename"
+            
+            # Get the next X lines (excluding header) and append to file
+            head -n $((count + 1)) tranco.csv | tail -n $count >> "$filename"
+            
+            lines=$(wc -l < "$filename")
+            echo "Successfully created $filename with $lines rows"
+          done
+        shell: bash
+      
+      - name: Configure Git
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+      
+      - name: Commit and push changes
+        run: |
+          git add *.csv
+          git diff --staged --quiet || (git commit -m "Update Tranco CSV extracts" && git push)
