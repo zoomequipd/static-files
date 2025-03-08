@@ -95,11 +95,8 @@ jobs:
               continue
             fi
             
-            # Get the header line
-            head -n 1 tranco.csv > "$filename"
-            
-            # Get the next X lines (excluding header) and append to file
-            head -n $((count + 1)) tranco.csv | tail -n $count >> "$filename"
+            # Get exactly the requested number of lines from the file
+            head -n $count tranco.csv > "$filename"
             
             lines=$(wc -l < "$filename")
             echo "Successfully created $filename with $lines rows"
