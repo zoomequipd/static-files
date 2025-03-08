@@ -105,10 +105,17 @@ jobs:
       
       - name: Configure Git
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
+          git config --local user.email "hello@sublimesecurity.com"
+          git config --local user.name "Tranco Process Bot"
       
       - name: Commit and push changes
         run: |
-          git add *.csv
-          git diff --staged --quiet || (git commit -m "Update Tranco CSV extracts" && git push)
+          # Parse the configuration to get the filenames
+          echo '${{ github.event.inputs.config }}' | jq -c '.[]' | while read -r config; do
+            filename=$(echo $config | jq -r '.filename')
+            # Add each generated file individually
+            git add "$filename"
+          done
+          
+          # Only commit if there are changes
+          git diff --staged --quiet || (git commit -m "Update Tranco Top Files [Automated]" && git push)
