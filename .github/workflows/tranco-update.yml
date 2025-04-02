@@ -62,7 +62,7 @@ jobs:
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             echo "Attempt $(($RETRY_COUNT + 1)) to download Tranco list ${{ steps.tranco-id.outputs.id }}..."
             
-            if curl -L --max-time 300 "https://tranco-list.eu/download_daily/${{ steps.tranco-id.outputs.id }}" -o tranco.zip; then
+            if curl -s -L --max-time 300 "https://tranco-list.eu/download_daily/${{ steps.tranco-id.outputs.id }}" -o tranco.zip; then
               echo "Successfully downloaded Tranco list ${{ steps.tranco-id.outputs.id }}"
               break
             fi
@@ -123,24 +123,29 @@ jobs:
       
       - name: Create and push branch
         run: |
-          git config --global user.name 'GitHub Actions Bot'
-          git config --global user.email 'actions@github.com'
-          git checkout -b tranco_update-${{ steps.date.outputs.today }}
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add tranco.csv
           git commit -m "Update Tranco list for ${{ steps.date.outputs.today }} (ID: ${{ steps.tranco-id.outputs.id }})"
-          git push origin tranco_update-${{ steps.date.outputs.today }}
-      
+          git push origin HEAD:refs/heads/tranco_update-${{ steps.date.outputs.today }}
+          
       - name: Create Pull Request
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr create \
-            --title "Update Tranco list - ${{ steps.date.outputs.today }}" \
-            --body "This PR updates the Tranco top 1 million domains list.
-            
-            - Date: ${{ steps.date.outputs.today }}
-            - Tranco List ID: ${{ steps.tranco-id.outputs.id }}
-            - List URL: https://tranco-list.eu/list/${{ steps.tranco-id.outputs.id }}
-            - Automated update via GitHub Actions" \
-            --base main \
-            --head tranco_update-${{ steps.date.outputs.today }}
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { repo, owner } = context.repo;
+            const result = await github.rest.pulls.create({
+              owner,
+              repo,
+              title: `Update Tranco list - ${{ steps.date.outputs.today }}`,
+              body: `This PR updates the Tranco top 1 million domains list.
+              
+              - Date: ${{ steps.date.outputs.today }}
+              - Tranco List ID: ${{ steps.tranco-id.outputs.id }}
+              - List URL: https://tranco-list.eu/list/${{ steps.tranco-id.outputs.id }}
+              - Automated update via GitHub Actions`,
+              head: `tranco_update-${{ steps.date.outputs.today }}`,
+              base: 'main'
+            });
+            console.log(`Pull request created: ${result.data.html_url}`);
