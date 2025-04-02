@@ -138,6 +138,8 @@ jobs:
           git push origin "$BRANCH_NAME"
           
       - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Create the PR using GitHub CLI (pre-installed on runners)
           gh pr create \
