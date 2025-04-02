@@ -31,8 +31,21 @@ jobs:
       - name: Fetch Tranco list ID
         id: tranco-id
         run: |
-          # Use curl's built-in retry mechanism with more robust settings
-          TRANCO_ID=$(curl -s --retry 5 --retry-delay 5 --retry-max-time 120 --connect-timeout 10 --max-time 60 https://tranco-list.eu/top-1m-id)
+          # Save the curl verbose output to a log file and the response to another file
+          echo "Fetching Tranco list ID..."
+          curl -v --retry 5 --retry-delay 5 --retry-max-time 120 --connect-timeout 10 --max-time 60 https://tranco-list.eu/top-1m-id > tranco_response.txt 2> curl_debug.log
+          
+          # Display the debug info
+          echo "Curl debug output:"
+          cat curl_debug.log
+          
+          # Get the HTTP status code
+          HTTP_STATUS=$(grep -oP "< HTTP/[0-9.]+ \K[0-9]+" curl_debug.log || echo "Unknown")
+          echo "HTTP Status Code: $HTTP_STATUS"
+          
+          # Get the response
+          TRANCO_ID=$(cat tranco_response.txt)
+          echo "Raw response: '$TRANCO_ID'"
           
           # Check if we got a valid ID (non-empty and contains alphanumeric characters)
           if [[ ! -z "$TRANCO_ID" && "$TRANCO_ID" =~ ^[A-Za-z0-9]+$ ]]; then
@@ -40,6 +53,17 @@ jobs:
             echo "Successfully fetched Tranco list ID: $TRANCO_ID"
           else
             echo "Received invalid Tranco ID: '$TRANCO_ID'"
+            echo "HTTP status code: $HTTP_STATUS"
+            echo "Content length: ${#TRANCO_ID} characters"
+            
+            # Check for timeout or connection issues
+            if grep -q "Connection timed out" curl_debug.log; then
+              echo "Error: Connection timed out"
+            fi
+            if grep -q "Failed to connect" curl_debug.log; then
+              echo "Error: Failed to connect"
+            fi
+            
             exit 1
           fi
       
