@@ -1,28 +1,126 @@
-name: Process Tranco CSV
+name: Update and Process Tranco CSV
 
 on:
-  push:
-    paths:
-      - 'tranco.csv'
-  pull_request:
-    paths:
-      - 'tranco.csv'
-  workflow_dispatch: {}  # Simple manual trigger with no inputs
+  schedule:
+    # Runs at 00:00 UTC every Monday
+    - cron: '0 0 * * 1'
+  # Allow manual triggering
+  workflow_dispatch:
 
 jobs:
-  process-tranco:
+  update-and-processtranco:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 1  # Only fetch the latest commit to speed up checkout
+          fetch-depth: 1
       
-      - name: Set configuration
-        id: config
+      - name: Set up date variables
+        id: date
+        run: |
+          echo "today=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
+      
+      - name: Fetch Tranco list ID
+        id: tranco-id
+        run: |
+          # Save the curl verbose output to a log file and the response to another file
+          echo "Fetching Tranco list ID..."
+          curl -v --retry 5 --retry-delay 5 --retry-max-time 120 --connect-timeout 10 --max-time 60 https://tranco-list.eu/top-1m-id > tranco_response.txt 2> curl_debug.log
+          
+          # Display the debug info
+          echo "Curl debug output:"
+          cat curl_debug.log
+          
+          # Get the HTTP status code
+          HTTP_STATUS=$(grep -oP "< HTTP/[0-9.]+ \K[0-9]+" curl_debug.log || echo "Unknown")
+          echo "HTTP Status Code: $HTTP_STATUS"
+          
+          # Get the response
+          TRANCO_ID=$(cat tranco_response.txt)
+          echo "Raw response: '$TRANCO_ID'"
+          
+          # Check if we got a valid ID (non-empty and contains alphanumeric characters)
+          if [[ ! -z "$TRANCO_ID" && "$TRANCO_ID" =~ ^[A-Za-z0-9]+$ ]]; then
+            echo "id=$TRANCO_ID" >> $GITHUB_OUTPUT
+            echo "Successfully fetched Tranco list ID: $TRANCO_ID"
+          else
+            echo "Received invalid Tranco ID: '$TRANCO_ID'"
+            echo "HTTP status code: $HTTP_STATUS"
+            echo "Content length: ${#TRANCO_ID} characters"
+            
+            # Check for timeout or connection issues
+            if grep -q "Connection timed out" curl_debug.log; then
+              echo "Error: Connection timed out"
+            fi
+            if grep -q "Failed to connect" curl_debug.log; then
+              echo "Error: Failed to connect"
+            fi
+            
+            exit 1
+          fi
+      
+      - name: Download Tranco list
+        id: download
+        run: |
+          # Similarly, use curl's built-in retry mechanism here too
+          if curl -s -L --retry 5 --retry-delay 10 --retry-max-time 300 --connect-timeout 15 --max-time 300 "https://tranco-list.eu/download_daily/${{ steps.tranco-id.outputs.id }}" -o tranco.zip; then
+            echo "Successfully downloaded Tranco list ${{ steps.tranco-id.outputs.id }}"
+          else
+            echo "Failed to download Tranco list"
+            exit 1
+          fi
+      
+      - name: Extract Tranco list
+        id: extract
+        run: |
+          if unzip -o tranco.zip; then
+            if [ -f "top-1m.csv" ]; then
+              echo "Successfully extracted Tranco list"
+            else
+              echo "Expected file 'top-1m.csv' not found in the zip archive"
+              ls -la
+              exit 1
+            fi
+          else
+            echo "Failed to extract zip file"
+            exit 1
+          fi
+      
+      - name: Validate Tranco list
+        id: validate_tranco_list
+        run: |
+          # Count lines to verify it's exactly 1 million
+          LINE_COUNT=$(wc -l < top-1m.csv)
+          
+          # Verify the first line starts with "1,"
+          FIRST_LINE=$(head -n 1 top-1m.csv)
+          
+          # Verify the last line starts with "1000000,"
+          LAST_LINE=$(tail -n 1 top-1m.csv)
+          
+          if [ "$LINE_COUNT" -eq 1000000 ] && [[ "$FIRST_LINE" =~ ^1, ]] && [[ "$LAST_LINE" =~ ^1000000, ]]; then
+            echo "File validation passed:"
+            echo "- Exactly 1,000,000 lines"
+            echo "- First line: $FIRST_LINE"
+            echo "- Last line: $LAST_LINE"
+            
+            # Move the file to desired location
+            mv top-1m.csv tranco.csv
+          else
+            echo "File validation failed:"
+            echo "- Line count: $LINE_COUNT (expected 1,000,000)"
+            echo "- First line: $FIRST_LINE (should start with '1,')"
+            echo "- Last line: $LAST_LINE (should start with '1000000,')"
+            exit 1
+          fi
+
+      
+      
+      - name: Set configuration for top files
+        id: set_config_top
         run: |
           # Configuration is defined here
           CONFIG='[{"count": 10000, "filename": "tranco_top_10k.csv"}, {"count": 50000, "filename": "tranco_top_50k.csv"}]'
@@ -30,7 +128,7 @@ jobs:
           echo "Using configuration: $CONFIG"
       
       - name: Validate manifest.json
-        id: validate
+        id: validate_manifest
         run: |
           # Check if manifest.json exists
           if [ ! -f "manifest.json" ]; then
@@ -96,19 +194,37 @@ jobs:
           git config --local user.email "hello@sublimesecurity.com"
           git config --local user.name "Tranco Process Bot"
       
-      - name: Commit and push changes
+      - name: Create and push branch
+        id: create-branch
         run: |
+          # Create a unique branch name with timestamp
+          BRANCH_NAME="tranco_update-${{ steps.date.outputs.today }}-${{ steps.date.outputs.timestamp }}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          
+          git checkout -b "$BRANCH_NAME"
+          git add tranco.csv
+
           # Parse the configuration to get the filenames
           echo $CONFIG | jq -c '.[]' | while read -r config; do
             filename=$(echo $config | jq -r '.filename')
             # Add each generated file individually
             git add "$filename"
           done
-          
-          # Check if there are any changes to commit
-          if git diff --staged --quiet; then
-            echo "No changes detected in the output files. Nothing to commit."
-          else
-            echo "Changes detected. Committing and pushing..."
-            git commit -m "Update Tranco Top Domain [automated]" && git push
-          fi
+
+          git commit -m "Update Tranco list for ${{ steps.date.outputs.today }} (ID: ${{ steps.tranco-id.outputs.id }})"
+          git push origin "$BRANCH_NAME"
+      
+      - name: Create Pull Request
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --title "Update Tranco list and derived files - ${{ steps.date.outputs.today }}" \
+            --body "This PR updates the Tranco top 1 million domains list and all derived files.
+            
+            - Date: ${{ steps.date.outputs.today }}
+            - Tranco List ID: ${{ steps.tranco-id.outputs.id }}
+            - List URL: https://tranco-list.eu/list/${{ steps.tranco-id.outputs.id }}
+            - Automated update via GitHub Actions" \
+            --head "$BRANCH_NAME" \
+            --base "master"
