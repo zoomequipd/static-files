@@ -138,22 +138,15 @@ jobs:
           git push origin "$BRANCH_NAME"
           
       - name: Create Pull Request
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { repo, owner } = context.repo;
-            const result = await github.rest.pulls.create({
-              owner,
-              repo,
-              title: `Update Tranco list - ${{ steps.date.outputs.today }}`,
-              body: `This PR updates the Tranco top 1 million domains list.
-              
-              - Date: ${{ steps.date.outputs.today }}
-              - Tranco List ID: ${{ steps.tranco-id.outputs.id }}
-              - List URL: https://tranco-list.eu/list/${{ steps.tranco-id.outputs.id }}
-              - Automated update via GitHub Actions`,
-              head: `${{ steps.create-branch.outputs.branch_name }}`,
-              base: 'main'
-            });
-            console.log(`Pull request created: ${result.data.html_url}`);
+        run: |
+          # Create the PR using GitHub CLI (pre-installed on runners)
+          gh pr create \
+            --title "Update Tranco list - ${{ steps.date.outputs.today }}" \
+            --body "This PR updates the Tranco top 1 million domains list.
+            
+            - Date: ${{ steps.date.outputs.today }}
+            - Tranco List ID: ${{ steps.tranco-id.outputs.id }}
+            - List URL: https://tranco-list.eu/list/${{ steps.tranco-id.outputs.id }}
+            - Automated update via GitHub Actions" \
+            --head "${{ steps.create-branch.outputs.branch_name }}" \
+            --base "main";
