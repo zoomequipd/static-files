@@ -130,17 +130,69 @@ jobs:
           BRANCH_NAME="tranco_update-${{ steps.date.outputs.today }}-${{ steps.date.outputs.timestamp }}"
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
           
+          echo "=== DIAGNOSTIC: Initial git status ==="
+          git status
+          
+          echo "=== DIAGNOSTIC: Current branches ==="
+          git branch -a
+          
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          echo "=== Creating new branch: $BRANCH_NAME ==="
           git checkout -b "$BRANCH_NAME"
+          
+          echo "=== DIAGNOSTIC: After branch creation ==="
+          git branch -a
+          
+          echo "=== Adding and committing file ==="
           git add tranco.csv
           git commit -m "Update Tranco list for ${{ steps.date.outputs.today }} (ID: ${{ steps.tranco-id.outputs.id }})"
+          
+          echo "=== DIAGNOSTIC: After commit ==="
+          git status
+          git log -n 2 --oneline
+          
+          echo "=== Pushing branch ==="
           git push origin "$BRANCH_NAME"
+          
+          echo "=== DIAGNOSTIC: After push ==="
+          git status
+          git branch -a
       
       - name: Create Pull Request
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          echo "=== DIAGNOSTIC: Environment variables ==="
+          echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
+          echo "BRANCH_NAME: ${{ steps.create-branch.outputs.branch_name }}"
+          echo "GITHUB_TOKEN set: $([ -n "$GITHUB_TOKEN" ] && echo 'true' || echo 'false')"
+          
+          echo "=== DIAGNOSTIC: Current git status ==="
+          git status
+          
+          echo "=== DIAGNOSTIC: Current branches ==="
+          git branch -a
+          
+          echo "=== DIAGNOSTIC: Remote branches ==="
+          git ls-remote --heads origin
+          
+          echo "=== DIAGNOSTIC: Comparing branches ==="
+          echo "Commit on main:"
+          git show main --no-patch --format="%H %s"
+          echo "Commit on feature branch:"
+          git show ${{ steps.create-branch.outputs.branch_name }} --no-patch --format="%H %s" || echo "Branch not found locally"
+          
+          echo "=== DIAGNOSTIC: Commit count ==="
+          echo "Commits on main: $(git rev-list --count main)"
+          echo "Commits on feature branch: $(git rev-list --count ${{ steps.create-branch.outputs.branch_name }} 2>/dev/null || echo 'Branch not found')"
+          echo "Commits between branches: $(git rev-list --count main..${{ steps.create-branch.outputs.branch_name }} 2>/dev/null || echo 'Cannot compare')"
+          
+          echo "=== DIAGNOSTIC: gh version ==="
+          gh --version
+          
+          echo "=== DIAGNOSTIC: Creating PR ==="
           gh pr create \
             --title "Update Tranco list - ${{ steps.date.outputs.today }}" \
             --body "This PR updates the Tranco top 1 million domains list.
@@ -150,4 +202,4 @@ jobs:
             - List URL: https://tranco-list.eu/list/${{ steps.tranco-id.outputs.id }}
             - Automated update via GitHub Actions" \
             --head "${{ steps.create-branch.outputs.branch_name }}" \
-            --base "main"
+            --base "main" || echo "PR creation failed with exit code $?"
