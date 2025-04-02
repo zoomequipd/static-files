@@ -29,22 +29,46 @@ jobs:
           
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             echo "Attempt $(($RETRY_COUNT + 1)) to fetch Tranco list ID..."
-            TRANCO_ID=$(curl -s --max-time 30 https://tranco-list.eu/top-1m-id)
             
-            # Check if we got a valid ID (non-empty and contains only digits)
-            if [[ ! -z "$TRANCO_ID" && "$TRANCO_ID" =~ ^[A_Z0-9]+$ ]]; then
-              echo "id=$TRANCO_ID" >> $GITHUB_OUTPUT
-              echo "Successfully fetched Tranco list ID: $TRANCO_ID"
-              break
-            else
-              RETRY_COUNT=$(($RETRY_COUNT + 1))
-              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                echo "Failed to fetch valid Tranco list ID. Retrying in 30 seconds..."
-                sleep 30
+            # Create a temp file for response headers
+            HEADER_FILE=$(mktemp)
+            
+            # Use curl with -w option to get status code and save response headers
+            RESPONSE=$(curl -s -w "\n%{http_code}" --max-time 30 -D "$HEADER_FILE" https://tranco-list.eu/top-1m-id)
+            
+            # Extract status code (last line) and response body (all but last line)
+            STATUS_CODE=$(echo "$RESPONSE" | tail -n1)
+            TRANCO_ID=$(echo "$RESPONSE" | sed '$d')
+            
+            echo "HTTP Status Code: $STATUS_CODE"
+            echo "Response Headers:"
+            cat "$HEADER_FILE"
+            echo "Raw Response Body: '$TRANCO_ID'"
+            
+            # Clean up the temp file
+            rm -f "$HEADER_FILE"
+            
+            # Check if request was successful (status code 200)
+            if [ "$STATUS_CODE" -eq 200 ]; then
+              # Check if we got a valid ID (non-empty and contains only alphanumeric characters)
+              if [[ ! -z "$TRANCO_ID" && "$TRANCO_ID" =~ ^[A-Za-z0-9]+$ ]]; then
+                echo "id=$TRANCO_ID" >> $GITHUB_OUTPUT
+                echo "Successfully fetched Tranco list ID: $TRANCO_ID"
+                break
               else
-                echo "Failed to fetch valid Tranco list ID after $MAX_RETRIES attempts."
-                exit 1
+                echo "Received response, but ID format was invalid: '$TRANCO_ID'"
               fi
+            else
+              echo "HTTP request failed with status code: $STATUS_CODE"
+            fi
+            
+            RETRY_COUNT=$(($RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Failed to fetch valid Tranco list ID. Retrying in 30 seconds..."
+              sleep 30
+            else
+              echo "Failed to fetch valid Tranco list ID after $MAX_RETRIES attempts."
+              exit 1
             fi
           done
       
