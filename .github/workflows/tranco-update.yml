@@ -24,7 +24,9 @@ jobs:
       
       - name: Set up date variables
         id: date
-        run: echo "today=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        run: |
+          echo "today=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
       
       - name: Fetch Tranco list ID
         id: tranco-id
@@ -122,12 +124,18 @@ jobs:
           fi
       
       - name: Create and push branch
+        id: create-branch
         run: |
+          # Create a unique branch name with timestamp
+          BRANCH_NAME="tranco_update-${{ steps.date.outputs.today }}-${{ steps.date.outputs.timestamp }}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$BRANCH_NAME"
           git add tranco.csv
           git commit -m "Update Tranco list for ${{ steps.date.outputs.today }} (ID: ${{ steps.tranco-id.outputs.id }})"
-          git push origin HEAD:refs/heads/tranco_update-${{ steps.date.outputs.today }}
+          git push origin "$BRANCH_NAME"
           
       - name: Create Pull Request
         uses: actions/github-script@v6
@@ -145,7 +153,7 @@ jobs:
               - Tranco List ID: ${{ steps.tranco-id.outputs.id }}
               - List URL: https://tranco-list.eu/list/${{ steps.tranco-id.outputs.id }}
               - Automated update via GitHub Actions`,
-              head: `tranco_update-${{ steps.date.outputs.today }}`,
+              head: `${{ steps.create-branch.outputs.branch_name }}`,
               base: 'main'
             });
             console.log(`Pull request created: ${result.data.html_url}`);
