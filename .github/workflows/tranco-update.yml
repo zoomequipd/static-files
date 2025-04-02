@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       
       - name: Set up date variables
         id: date
@@ -30,7 +32,7 @@ jobs:
             TRANCO_ID=$(curl -s --max-time 30 https://tranco-list.eu/top-1m-id)
             
             # Check if we got a valid ID (non-empty and contains only digits)
-            if [[ ! -z "$TRANCO_ID" && "$TRANCO_ID" =~ ^[0-9]+$ ]]; then
+            if [[ ! -z "$TRANCO_ID" && "$TRANCO_ID" =~ ^[A_Z0-9]+$ ]]; then
               echo "id=$TRANCO_ID" >> $GITHUB_OUTPUT
               echo "Successfully fetched Tranco list ID: $TRANCO_ID"
               break
