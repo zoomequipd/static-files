@@ -26,50 +26,106 @@ jobs:
       - name: Fetch Tranco list ID
         id: tranco-id
         run: |
-          # Save the curl verbose output to a log file and the response to another file
-          echo "Fetching Tranco list ID..."
-          curl -v --retry 5 --retry-delay 5 --retry-max-time 120 --connect-timeout 10 --max-time 60 https://tranco-list.eu/top-1m-id > tranco_response.txt 2> curl_debug.log
+          # Maximum retry count
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          SUCCESS=false
           
-          # Display the debug info
-          echo "Curl debug output:"
-          cat curl_debug.log
-          
-          # Get the HTTP status code
-          HTTP_STATUS=$(grep -oP "< HTTP/[0-9.]+ \K[0-9]+" curl_debug.log || echo "Unknown")
-          echo "HTTP Status Code: $HTTP_STATUS"
-          
-          # Get the response
-          TRANCO_ID=$(cat tranco_response.txt)
-          echo "Raw response: '$TRANCO_ID'"
-          
-          # Check if we got a valid ID (non-empty and contains alphanumeric characters)
-          if [[ ! -z "$TRANCO_ID" && "$TRANCO_ID" =~ ^[A-Za-z0-9]+$ ]]; then
-            echo "id=$TRANCO_ID" >> $GITHUB_OUTPUT
-            echo "Successfully fetched Tranco list ID: $TRANCO_ID"
-          else
-            echo "Received invalid Tranco ID: '$TRANCO_ID'"
-            echo "HTTP status code: $HTTP_STATUS"
-            echo "Content length: ${#TRANCO_ID} characters"
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$SUCCESS" = "false" ]; do
+            # Save the curl verbose output to a log file and the response to another file
+            echo "Attempt $(($RETRY_COUNT + 1)) of $MAX_RETRIES: Fetching Tranco list ID..."
             
-            # Check for timeout or connection issues
-            if grep -q "Connection timed out" curl_debug.log; then
-              echo "Error: Connection timed out"
-            fi
-            if grep -q "Failed to connect" curl_debug.log; then
-              echo "Error: Failed to connect"
-            fi
+            # Use -w to capture HTTP status code
+            HTTP_STATUS=$(curl -s -o tranco_response.txt -w "%{http_code}" \
+              --retry 3 --retry-delay 5 --retry-max-time 120 \
+              --connect-timeout 10 --max-time 60 \
+              https://tranco-list.eu/top-1m-id)
             
+            echo "HTTP Status Code: $HTTP_STATUS"
+            
+            # Check if HTTP status code is 200 (OK)
+            if [ "$HTTP_STATUS" -eq 200 ]; then
+              # Get the response
+              TRANCO_ID=$(cat tranco_response.txt)
+              echo "Raw response: '$TRANCO_ID'"
+              
+              # Check if we got a valid ID (non-empty and contains alphanumeric characters)
+              if [[ ! -z "$TRANCO_ID" && "$TRANCO_ID" =~ ^[A-Za-z0-9]+$ ]]; then
+                echo "id=$TRANCO_ID" >> $GITHUB_OUTPUT
+                echo "Successfully fetched Tranco list ID: $TRANCO_ID"
+                SUCCESS=true
+              else
+                echo "Received invalid Tranco ID: '$TRANCO_ID' despite HTTP 200"
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                
+                if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                  echo "Retrying in 10 seconds..."
+                  sleep 10
+                fi
+              fi
+            else
+              echo "Request failed with HTTP status code: $HTTP_STATUS"
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "Retrying in 10 seconds..."
+                sleep 10
+              fi
+            fi
+          done
+          
+          if [ "$SUCCESS" = "false" ]; then
+            echo "Failed to fetch Tranco list ID after $MAX_RETRIES attempts"
             exit 1
           fi
       
       - name: Download Tranco list
         id: download
         run: |
-          # Similarly, use curl's built-in retry mechanism here too
-          if curl -s -L --retry 5 --retry-delay 10 --retry-max-time 300 --connect-timeout 15 --max-time 300 "https://tranco-list.eu/download_daily/${{ steps.tranco-id.outputs.id }}" -o tranco.zip; then
-            echo "Successfully downloaded Tranco list ${{ steps.tranco-id.outputs.id }}"
-          else
-            echo "Failed to download Tranco list"
+          # Maximum retry count
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          SUCCESS=false
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$SUCCESS" = "false" ]; do
+            echo "Attempt $(($RETRY_COUNT + 1)) of $MAX_RETRIES: Downloading Tranco list ${{ steps.tranco-id.outputs.id }}..."
+            
+            # Use -w to capture HTTP status code
+            HTTP_STATUS=$(curl -s -L -o tranco.zip -w "%{http_code}" \
+              --retry 3 --retry-delay 10 --retry-max-time 300 \
+              --connect-timeout 15 --max-time 300 \
+              "https://tranco-list.eu/download_daily/${{ steps.tranco-id.outputs.id }}")
+            
+            echo "HTTP Status Code: $HTTP_STATUS"
+            
+            # Check if HTTP status code is 200 (OK)
+            if [ "$HTTP_STATUS" -eq 200 ]; then
+              # Check if file was actually downloaded and has content
+              if [ -s tranco.zip ]; then
+                echo "Successfully downloaded Tranco list ${{ steps.tranco-id.outputs.id }}"
+                SUCCESS=true
+              else
+                echo "Downloaded file is empty despite HTTP 200"
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                
+                if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                  echo "Retrying in 15 seconds..."
+                  sleep 15
+                fi
+              fi
+            else
+              echo "Download failed with HTTP status code: $HTTP_STATUS"
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "Retrying in 15 seconds..."
+                sleep 15
+              fi
+            fi
+          done
+          
+          if [ "$SUCCESS" = "false" ]; then
+            echo "Failed to download Tranco list after $MAX_RETRIES attempts"
             exit 1
           fi
       
@@ -117,8 +173,6 @@ jobs:
             exit 1
           fi
 
-      
-      
       - name: Set configuration for top files
         id: set_config_top
         run: |
