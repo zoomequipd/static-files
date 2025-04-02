@@ -136,12 +136,11 @@ jobs:
           git add tranco.csv
           git commit -m "Update Tranco list for ${{ steps.date.outputs.today }} (ID: ${{ steps.tranco-id.outputs.id }})"
           git push origin "$BRANCH_NAME"
-          
+      
       - name: Create Pull Request
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Create the PR using GitHub CLI (pre-installed on runners)
           gh pr create \
             --title "Update Tranco list - ${{ steps.date.outputs.today }}" \
             --body "This PR updates the Tranco top 1 million domains list.
@@ -151,4 +150,4 @@ jobs:
             - List URL: https://tranco-list.eu/list/${{ steps.tranco-id.outputs.id }}
             - Automated update via GitHub Actions" \
             --head "${{ steps.create-branch.outputs.branch_name }}" \
-            --base "main";
+            --base "main"
