@@ -92,17 +92,17 @@ jobs:
           # Verify the file contains data by checking the second line
           FIRST_DATA_LINE=$(head -n 2 majestic_million.csv | tail -n 1)
           
-          if [ "$LINE_COUNT" -gt 1000000 ] && [[ "$HEADER" == *"GlobalRank"* ]] && [ ! -z "$FIRST_DATA_LINE" ] && [ "$COLUMN_COUNT" -eq 11 ]; then
+          if [ "$LINE_COUNT" -gt 1000000 ] && [[ "$HEADER" == *"GlobalRank"* ]] && [ ! -z "$FIRST_DATA_LINE" ] && [ "$COLUMN_COUNT" -eq 12 ]; then
             echo "File validation passed for majestic_million.csv:"
             echo "- Contains $LINE_COUNT lines (at least 1,000,000 expected)"
             echo "- Header found: $HEADER"
-            echo "- Column count: $COLUMN_COUNT (expected 11)"
+            echo "- Column count: $COLUMN_COUNT (expected 12)"
             echo "- Data found in file"
           else
             echo "File validation failed for majestic_million.csv:"
             echo "- Line count: $LINE_COUNT (expected > 1,000,000)"
             echo "- Header: $HEADER (should contain 'GlobalRank')"
-            echo "- Column count: $COLUMN_COUNT (expected 11)"
+            echo "- Column count: $COLUMN_COUNT (expected 12)"
             echo "- First data line: $FIRST_DATA_LINE (should not be empty)"
             exit 1
           fi
